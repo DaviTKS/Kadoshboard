@@ -1,0 +1,2023 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Financeiro Kadosh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .card-interactive {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        .card-interactive::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        .card-interactive:hover::before {
+            transform: scaleX(1);
+        }
+        .card-interactive:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+        .kpi-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.8) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .mood-icon {
+            font-size: 4rem;
+            line-height: 1;
+            animation: bounce 2s infinite;
+        }
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+        .upload-area {
+            border: 3px dashed rgba(102, 126, 234, 0.3);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+        }
+        .upload-area:hover {
+            border-color: rgba(102, 126, 234, 0.6);
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            transform: scale(1.02);
+        }
+        .stat-number {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(102, 126, 234, 0.1);
+            border-left: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.6s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+
+        .table-row {
+            transition: background-color 0.2s ease;
+        }
+        .table-row:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 text-center">
+            <div class="glass-card p-8 mb-6">
+                <h1 class="text-4xl md:text-5xl font-bold text-gray-800 mb-2">
+                    <i class="fas fa-chart-line text-blue-600 mr-3"></i>
+                    Kadoshboard
+                </h1>
+                <p class="text-gray-600 text-lg">Análise inteligente de suas transações financeiras</p>
+            </div>
+        </header>
+
+        <!-- File Upload Area -->
+        <div class="upload-area p-8 mb-8 text-center" id="uploadArea">
+            <i class="fas fa-cloud-upload-alt text-4xl text-blue-500 mb-4"></i>
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">Carregue seus arquivos financeiros</h3>
+            <p class="text-gray-500 mb-4">Arraste e solte ou clique para selecionar arquivos CSV, XLSX ou XLS (um por ano)</p>
+            <input type="file" id="csvFile" accept=".csv,.xlsx,.xls" multiple class="hidden"/>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button onclick="document.getElementById('csvFile').click()" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-full font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl">
+                    <i class="fas fa-file-upload mr-2"></i>
+                    Selecionar Arquivos
+                </button>
+                <button id="process-files-btn" onclick="processSelectedFiles()" class="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-full font-semibold hover:from-green-600 hover:to-emerald-700 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl hidden">
+                    <i class="fas fa-play mr-2"></i>
+                    Processar Arquivos
+                </button>
+                <button onclick="clearAllFiles()" class="bg-gradient-to-r from-red-500 to-pink-600 text-white px-4 py-3 rounded-full font-semibold hover:from-red-600 hover:to-pink-700 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl">
+                    <i class="fas fa-trash mr-2"></i>
+                    Limpar
+                </button>
+                <button onclick="analyzeCaixaStructure()" class="bg-gradient-to-r from-yellow-500 to-orange-600 text-white px-4 py-3 rounded-full font-semibold hover:from-yellow-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl">
+                    <i class="fas fa-search mr-2"></i>
+                    Analisar Caixa_2024
+                </button>
+            </div>
+            <div id="selected-files" class="mt-4 space-y-2">
+                <!-- Selected files will be displayed here -->
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="text-center py-16 hidden">
+            <div class="glass-card p-8 inline-block">
+                <div class="loading-spinner mx-auto mb-4"></div>
+                <p class="text-lg text-gray-600">Processando dados...</p>
+            </div>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard-content" class="hidden">
+            <!-- View Control Section -->
+            <div class="glass-card p-6 mb-8">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-eye text-blue-600 mr-2"></i>
+                            Controle de Visualização
+                        </h3>
+                        <p class="text-gray-500 text-sm">Selecione como deseja visualizar os dados</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <select id="view-mode" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 cursor-pointer">
+                            <option value="all">Todos os anos</option>
+                            <option value="year">Ano específico</option>
+                            <option value="average">Média dos anos</option>
+                        </select>
+                        <select id="year-selector" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 cursor-pointer hidden">
+                            <option value="">Selecione o ano</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPIs Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <!-- Total Entradas -->
+                <div class="kpi-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-gray-500 font-medium text-sm uppercase tracking-wider">Total Entradas</h2>
+                            <p id="total-entradas" class="text-3xl font-bold stat-number mt-2">R$ 0,00</p>
+                        </div>
+                        <div class="text-green-500 text-3xl">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Saídas -->
+                <div class="kpi-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-gray-500 font-medium text-sm uppercase tracking-wider">Total Saídas</h2>
+                            <p id="total-saidas" class="text-3xl font-bold text-red-500 mt-2">R$ 0,00</p>
+                        </div>
+                        <div class="text-red-500 text-3xl">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Saldo Final -->
+                <div class="kpi-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-gray-500 font-medium text-sm uppercase tracking-wider">Saldo Final</h2>
+                            <p id="saldo-final" class="text-3xl font-bold text-blue-600 mt-2">R$ 0,00</p>
+                        </div>
+                        <div class="text-blue-600 text-3xl">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mood Financeiro -->
+                <div id="mood-card" class="kpi-card flex flex-col items-center justify-center">
+                    <h2 class="text-gray-500 font-medium mb-2 text-sm uppercase tracking-wider">Humor Financeiro</h2>
+                    <div id="mood-icon" class="mood-icon">😐</div>
+                    <p id="mood-text" class="font-semibold mt-2 text-gray-600">Estável</p>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="card lg:col-span-2">
+                    <h3 class="font-semibold text-gray-700 mb-4 text-xl">
+                        <i class="fas fa-chart-bar text-blue-600 mr-2"></i>
+                        Fluxo de Caixa Mensal
+                    </h3>
+                    <div class="relative h-96">
+                        <canvas id="fluxo-mensal-chart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="font-semibold text-gray-700 mb-4 text-xl">
+                        <i class="fas fa-chart-pie text-green-600 mr-2"></i>
+                        Entradas por Categoria
+                    </h3>
+                    <div class="max-h-80 flex justify-center">
+                        <canvas id="entradas-categoria-chart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="font-semibold text-gray-700 mb-4 text-xl">
+                        <i class="fas fa-chart-donut text-red-600 mr-2"></i>
+                        Despesas por Categoria
+                    </h3>
+                    <div class="max-h-80 flex justify-center">
+                        <canvas id="despesas-categoria-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Additional Analytics Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Top Categories -->
+                <div class="card">
+                    <h3 class="font-semibold text-gray-700 mb-4 text-xl">
+                        <i class="fas fa-trophy text-yellow-600 mr-2"></i>
+                        Top Categorias
+                    </h3>
+                    <div id="top-categories" class="space-y-3">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Monthly Trends -->
+                <div class="card">
+                    <h3 class="font-semibold text-gray-700 mb-4 text-xl">
+                        <i class="fas fa-trending-up text-green-600 mr-2"></i>
+                        Tendências Mensais
+                    </h3>
+                    <div id="monthly-trends" class="space-y-3">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="card">
+                    <h3 class="font-semibold text-gray-700 mb-4 text-xl">
+                        <i class="fas fa-chart-line text-blue-600 mr-2"></i>
+                        Estatísticas Rápidas
+                    </h3>
+                    <div id="quick-stats" class="space-y-4">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Table with Search and Filter -->
+            <div class="card">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+                    <h3 class="font-semibold text-gray-700 text-xl">
+                        <i class="fas fa-list text-purple-600 mr-2"></i>
+                        Transações
+                    </h3>
+                    <div class="flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
+                        <input type="text" id="search-input" placeholder="Buscar transações..." 
+                               class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400">
+                        <select id="year-filter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 cursor-pointer">
+                            <option value="">Todos os anos</option>
+                        </select>
+                        <select id="category-filter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 cursor-pointer">
+                            <option value="">Todas as categorias</option>
+                        </select>
+                        <select id="page-size" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400 cursor-pointer">
+                            <option value="10">10 últimas</option>
+                            <option value="20" selected>20 últimas</option>
+                            <option value="50">50 últimas</option>
+                            <option value="100">100 últimas</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200" onclick="sortTable('date')">
+                                    <i class="fas fa-calendar mr-1"></i>Data
+                                    <i class="fas fa-sort ml-1"></i>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200" onclick="sortTable('os')">
+                                    <i class="fas fa-hashtag mr-1"></i>OS
+                                    <i class="fas fa-sort ml-1"></i>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200" onclick="sortTable('description')">
+                                    <i class="fas fa-tag mr-1"></i>Descrição
+                                    <i class="fas fa-sort ml-1"></i>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200" onclick="sortTable('category')">
+                                    <i class="fas fa-folder mr-1"></i>Categoria
+                                    <i class="fas fa-sort ml-1"></i>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200" onclick="sortTable('status')">
+                                    <i class="fas fa-info-circle mr-1"></i>Status
+                                    <i class="fas fa-sort ml-1"></i>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200" onclick="sortTable('value')">
+                                    <i class="fas fa-dollar-sign mr-1"></i>Valor
+                                    <i class="fas fa-sort ml-1"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactions-table" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows will be inserted here by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div class="text-sm text-gray-500" id="table-info">
+                        Mostrando <span id="showing-count">0</span> de <span id="total-count">0</span> transações
+                    </div>
+                    <div class="flex items-center gap-2" id="pagination-controls">
+                        <button id="prev-page" class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105 active:scale-95">
+                            <i class="fas fa-chevron-left mr-1"></i>Anterior
+                        </button>
+                        <span class="text-sm text-gray-600">
+                            Página <span id="current-page">1</span> de <span id="total-pages">1</span>
+                        </span>
+                        <button id="next-page" class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105 active:scale-95">
+                            Próxima<i class="fas fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Logs Toggle Button -->
+    <button id="debug-toggle" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-gray-700 transition-all duration-200 z-50">
+        <i class="fas fa-bug mr-2"></i>
+        Debug Logs
+    </button>
+
+    <!-- Debug Logs Section -->
+    <div id="debug-logs" class="fixed bottom-0 left-0 right-0 bg-gray-900 text-white font-mono text-sm p-4 max-h-80 overflow-auto z-40 transform translate-y-full transition-transform duration-300">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="font-semibold text-lg">
+                <i class="fas fa-bug mr-2"></i>
+                Logs de Debug
+            </h3>
+            <div class="flex items-center gap-2">
+                <button id="debug-clear" class="text-gray-400 hover:text-white transition-colors" title="Limpar logs">
+                    <i class="fas fa-trash text-sm"></i>
+                </button>
+                <button id="debug-close" class="text-gray-400 hover:text-white transition-colors" title="Fechar">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+        <div id="debug-logs-content" class="space-y-1"></div>
+    </div>
+
+    <script>
+    // Função para adicionar logs na interface
+    function addDebugLog(msg) {
+        const logDiv = document.getElementById('debug-logs-content');
+        if (!logDiv) return;
+        
+        const timestamp = new Date().toLocaleTimeString();
+        let text;
+        
+        if (typeof msg === 'object') {
+            try {
+                text = JSON.stringify(msg, null, 2);
+            } catch (e) {
+                text = String(msg);
+            }
+        } else {
+            text = String(msg);
+        }
+        
+        const entry = document.createElement('div');
+        entry.className = 'border-l-2 border-blue-500 pl-3 py-1';
+        
+        // Formatar mensagens especiais
+        if (text.includes('=== RESUMO FINAL ===')) {
+            entry.className = 'border-l-2 border-green-500 pl-3 py-2 font-bold text-green-400';
+        } else if (text.includes('=== ANÁLISE DETALHADA ===')) {
+            entry.className = 'border-l-2 border-yellow-500 pl-3 py-2 font-bold text-yellow-400';
+        } else if (text.includes('Adding to receitas:')) {
+            entry.className = 'border-l-2 border-green-500 pl-3 py-1 text-green-300';
+        } else if (text.includes('Adding to despesas:')) {
+            entry.className = 'border-l-2 border-red-500 pl-3 py-1 text-red-300';
+        }
+        
+        entry.innerHTML = `<span class="text-gray-400 text-xs">[${timestamp}]</span> ${text}`;
+        logDiv.appendChild(entry);
+        logDiv.scrollTop = logDiv.scrollHeight;
+        
+
+    }
+
+            document.addEventListener('DOMContentLoaded', () => {
+            // Debug logs toggle functionality
+            const debugToggle = document.getElementById('debug-toggle');
+            const debugLogs = document.getElementById('debug-logs');
+            const debugClose = document.getElementById('debug-close');
+            
+            debugToggle.addEventListener('click', () => {
+                debugLogs.classList.toggle('translate-y-full');
+                debugToggle.classList.toggle('bg-gray-800');
+                debugToggle.classList.toggle('bg-blue-600');
+            });
+            
+            debugClose.addEventListener('click', () => {
+                debugLogs.classList.add('translate-y-full');
+                debugToggle.classList.remove('bg-blue-600');
+                debugToggle.classList.add('bg-gray-800');
+            });
+            
+            // Clear logs functionality
+            const debugClear = document.getElementById('debug-clear');
+            debugClear.addEventListener('click', () => {
+                const logDiv = document.getElementById('debug-logs-content');
+                if (logDiv) {
+                    logDiv.innerHTML = '';
+                }
+            });
+            
+            // Chart instances
+            let fluxoMensalChart = null;
+            let despesasCategoriaChart = null;
+            let entradasCategoriaChart = null;
+
+        // Global variables for filtering and sorting
+        let allTransactions = [];
+        let filteredTransactions = [];
+        let currentSort = { field: 'date', direction: 'desc' };
+        let selectedFiles = new Map(); // Store selected files by year
+        let pendingFiles = []; // Store files waiting to be processed
+        let processedData = null; // Store processed data for all years
+        
+        // Pagination variables
+        let currentPage = 1;
+        let pageSize = 20;
+        let totalPages = 1;
+
+        // Initialize pendingFiles as a global variable
+        window.pendingFiles = pendingFiles;
+
+        // Initialize selected files display
+        updateSelectedFilesDisplay();
+
+        // Function to analyze Caixa_2024.xlsx structure and set standard headers
+        window.analyzeCaixaStructure = function() {
+            // Try to read the Caixa_2024.xlsx file if it exists
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.xlsx,.xls';
+            fileInput.style.display = 'none';
+            
+            fileInput.onchange = function(e) {
+                const file = e.target.files[0];
+                if (file && file.name.includes('Caixa_2024')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const workbook = XLSX.read(e.target.result, { type: 'binary' });
+                            const sheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[sheetName];
+                            
+                            // Get headers
+                            const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                            const headers = rawData[0] || [];
+                            
+                            console.log('Caixa_2024.xlsx headers found:', headers);
+                            
+                            // Set standard structure based on Caixa_2024.xlsx
+                            setStandardStructure(headers);
+                            
+                            alert(`Estrutura do Caixa_2024.xlsx analisada!\n\nHeaders encontrados:\n${headers.join(', ')}\n\nVerifique o console para mais detalhes.`);
+                        } catch (error) {
+                            console.error('Error analyzing Caixa_2024.xlsx:', error);
+                            alert('Erro ao analisar o arquivo Caixa_2024.xlsx');
+                        }
+                    };
+                    reader.readAsBinaryString(file);
+                }
+            };
+            
+            fileInput.click();
+        };
+
+        // Global variable to store standard structure
+        let STANDARD_HEADERS = null;
+        let HEADER_MAPPING = {};
+
+        // Function to set standard structure based on Caixa_2024.xlsx
+        function setStandardStructure(headers) {
+            STANDARD_HEADERS = headers;
+            
+            // Create mapping for different possible column names
+            HEADER_MAPPING = {
+                dateColumn: headers.find(h => h && h.toLowerCase().includes('data')) || 'data',
+                osColumn: headers.find(h => h && h.toLowerCase().includes('os')) || 'os',
+                descriptionColumn: headers.find(h => h && (h.toLowerCase().includes('descrição') || h.toLowerCase().includes('descricao') || h.toLowerCase().includes('desc'))) || 'descrição',
+                categoryColumn: headers.find(h => h && h.toLowerCase().includes('categoria')) || 'categoria',
+                statusColumn: headers.find(h => h && h.toLowerCase().includes('status')) || 'status',
+                valueColumn: headers.find(h => h && h.toLowerCase().includes('valor')) || 'valor'
+            };
+            
+            console.log('Standard structure set:', HEADER_MAPPING);
+        }
+
+        // Drag and drop functionality
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('csvFile');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleMultipleFiles(Array.from(files));
+            }
+        });
+
+        function formatCurrency(value) {
+            return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function parseData(fileContent, fileType) {
+            let data = [];
+            
+            if (fileType === 'csv') {
+                // Parse CSV using Papa Parse
+                const parsed = Papa.parse(fileContent, {
+                    header: true,
+                    skipEmptyLines: true,
+                    dynamicTyping: true
+                });
+                data = parsed.data;
+            } else if (fileType === 'xlsx' || fileType === 'xls') {
+                // Parse XLSX using SheetJS
+                const workbook = XLSX.read(fileContent, { type: 'binary' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                
+                try {
+                    data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (data.length > 0) {
+                        const headers = data[0];
+                        addDebugLog('Headers detectados:');
+                        addDebugLog(headers);
+                        data = data.slice(1).map(row => {
+                            const obj = {};
+                            headers.forEach((header, index) => {
+                                if (header) {
+                                    obj[header] = row[index];
+                                }
+                            });
+                            return obj;
+                        });
+                        addDebugLog('Primeiras linhas do data:');
+                        addDebugLog(data.slice(0, 10));
+                        
+                        // Verificar se existem linhas com status "saída" no arquivo inteiro
+                        const todasSaidas = data.filter(row => row && row.status && row.status.toLowerCase() === 'saída');
+                        addDebugLog('Todas as linhas com status "saída" no arquivo:');
+                        addDebugLog(todasSaidas);
+                        addDebugLog('Quantidade total de linhas com status "saída": ' + todasSaidas.length);
+                        
+                        // Verificar todos os status únicos no arquivo
+                        const todosStatus = [...new Set(data.map(row => row && row.status))];
+                        addDebugLog('Todos os status únicos no arquivo:');
+                        addDebugLog(todosStatus);
+                    }
+                } catch (error) {
+                    addDebugLog('Erro ao ler XLSX: ' + error);
+                    return [];
+                }
+            }
+            
+            addDebugLog('Raw data length: ' + data.length);
+            addDebugLog('Sample raw data:');
+            addDebugLog(data.slice(0, 3));
+            
+            // Process data using standard structure
+            const processedData = data.map(row => {
+                if (!row) return null;
+                
+                // Use standard mapping if available, otherwise fallback to common names
+                const dateColumn = HEADER_MAPPING.dateColumn || 'data';
+                const osColumn = HEADER_MAPPING.osColumn || 'os';
+                const descriptionColumn = HEADER_MAPPING.descriptionColumn || 'descrição';
+                const categoryColumn = HEADER_MAPPING.categoryColumn || 'categoria';
+                const statusColumn = HEADER_MAPPING.statusColumn || 'status';
+                const valueColumn = HEADER_MAPPING.valueColumn || 'valor';
+                
+                // Extract values using mapped column names
+                const dataValue = row[dateColumn] || '';
+                const os = row[osColumn] || '';
+                const descricao = row[descriptionColumn] || '';
+                const categoria = row[categoryColumn] || '';
+                const status = row[statusColumn] || '';
+                const valor = row[valueColumn] || 0;
+                
+                // Convert to numbers if they're strings, handling currency formats
+                let valorNum;
+                
+                if (typeof valor === 'string') {
+                    valorNum = parseFloat(valor.replace(/[^\d.,-]/g, '').replace(',', '.'));
+                } else {
+                    valorNum = parseFloat(valor) || 0;
+                }
+                
+                if (isNaN(valorNum)) valorNum = 0;
+                
+                // Normalize date format
+                let normalizedDate = dataValue;
+                if (dataValue) {
+                    if (typeof dataValue === 'number') {
+                        // Convert Excel date number to date string
+                        const excelDate = new Date((dataValue - 25569) * 86400 * 1000);
+                        normalizedDate = excelDate.toLocaleDateString('pt-BR');
+                    } else if (typeof dataValue === 'string') {
+                        try {
+                            const date = new Date(dataValue);
+                            if (!isNaN(date.getTime())) {
+                                normalizedDate = date.toLocaleDateString('pt-BR');
+                            }
+                        } catch (e) {
+                            normalizedDate = dataValue;
+                        }
+                    }
+                }
+                
+                return {
+                    Data: normalizedDate,
+                    OS: os,
+                    Descricao: descricao,
+                    Categoria: categoria,
+                    Status: status,
+                    Valor: valorNum
+                };
+                            }).filter(row => row && row.Valor !== undefined && !isNaN(row.Valor));
+
+            addDebugLog('Processed data length: ' + processedData.length);
+            addDebugLog('Sample processed data:');
+            addDebugLog(processedData.slice(0, 3));
+            
+            // Check what's being filtered out
+            const beforeFilter = data.map(row => {
+                if (!row) return null;
+                
+                // Use standard mapping if available, otherwise fallback to common names
+                const dateColumn = HEADER_MAPPING.dateColumn || 'data';
+                const osColumn = HEADER_MAPPING.osColumn || 'os';
+                const descriptionColumn = HEADER_MAPPING.descriptionColumn || 'descrição';
+                const categoryColumn = HEADER_MAPPING.categoryColumn || 'categoria';
+                const statusColumn = HEADER_MAPPING.statusColumn || 'status';
+                const valueColumn = HEADER_MAPPING.valueColumn || 'valor';
+                
+                // Extract values using mapped column names
+                const dataValue = row[dateColumn] || '';
+                const os = row[osColumn] || '';
+                const descricao = row[descriptionColumn] || '';
+                const categoria = row[categoryColumn] || '';
+                const status = row[statusColumn] || '';
+                const valor = row[valueColumn] || 0;
+                
+                // Convert to numbers if they're strings, handling currency formats
+                let valorNum;
+                
+                if (typeof valor === 'string') {
+                    valorNum = parseFloat(valor.replace(/[^\d.,-]/g, '').replace(',', '.'));
+                } else {
+                    valorNum = parseFloat(valor) || 0;
+                }
+                
+                if (isNaN(valorNum)) valorNum = 0;
+                
+                // Normalize date format
+                let normalizedDate = dataValue;
+                if (dataValue) {
+                    if (typeof dataValue === 'number') {
+                        // Convert Excel date number to date string
+                        const excelDate = new Date((dataValue - 25569) * 86400 * 1000);
+                        normalizedDate = excelDate.toLocaleDateString('pt-BR');
+                    } else if (typeof dataValue === 'string') {
+                        try {
+                            const date = new Date(dataValue);
+                            if (!isNaN(date.getTime())) {
+                                normalizedDate = date.toLocaleDateString('pt-BR');
+                            }
+                        } catch (e) {
+                            normalizedDate = dataValue;
+                        }
+                    }
+                }
+                
+                return {
+                    Data: normalizedDate,
+                    OS: os,
+                    Descricao: descricao,
+                    Categoria: categoria,
+                    Status: status,
+                    Valor: valorNum
+                };
+            });
+            
+            const filteredOut = beforeFilter.filter(row => !row || !row.Data || row.Valor === undefined || isNaN(row.Valor));
+            addDebugLog('Filtered out transactions: ' + filteredOut.length);
+            if (filteredOut.length > 0) {
+                addDebugLog('Sample filtered out transactions:');
+                addDebugLog(filteredOut.slice(0, 5));
+            }
+
+            return processedData;
+        }
+        
+        function processTransactions(transactions) {
+            addDebugLog('Starting to process ' + transactions.length + ' transactions');
+            addDebugLog('Sample transactions:');
+            addDebugLog(transactions.slice(0, 5));
+            
+            // Check all unique status values
+            const uniqueStatuses = [...new Set(transactions.map(t => t.Status))];
+            addDebugLog('All unique status values:');
+            addDebugLog(uniqueStatuses);
+            
+            // Check for transactions with "saída" status
+            const saidaTransactions = transactions.filter(t => 
+                (t.Status || '').toLowerCase().includes('saída') || 
+                (t.Status || '').toLowerCase().includes('saida')
+            );
+            addDebugLog('Transactions with "saída" status: ' + saidaTransactions.length);
+            if (saidaTransactions.length > 0) {
+                addDebugLog('Sample "saída" transactions:');
+                addDebugLog(saidaTransactions.slice(0, 3));
+                
+                // Check if saida transactions have dates
+                const saidaComData = saidaTransactions.filter(t => t.Data && t.Data.trim() !== '');
+                const saidaSemData = saidaTransactions.filter(t => !t.Data || t.Data.trim() === '');
+                addDebugLog('Saída transactions with date: ' + saidaComData.length);
+                addDebugLog('Saída transactions without date: ' + saidaSemData.length);
+                
+                if (saidaComData.length > 0) {
+                    addDebugLog('Sample saida transactions with date:');
+                    addDebugLog(saidaComData.slice(0, 3));
+                }
+            }
+            
+            let totalReceitas = 0;
+            let totalDespesas = 0;
+            let countEntradas = 0;
+            let countSaidas = 0;
+            let countUnclear = 0;
+            const despesasPorCategoria = {};
+            const receitasPorCategoria = {};
+            const fluxoMensalTemp = {};
+            const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+                            transactions.forEach(t => {
+                    if (t.Valor === undefined) return;
+                    
+                    // Determine if it's entrada or saída based on Status column
+                    const status = (t.Status || '').toLowerCase().trim();
+                    const isEntrada = status === 'entrada';
+                    const isSaida = status === 'saída' || status === 'saida';
+                    
+                    // Debug log for status classification
+                    if (isEntrada || isSaida) {
+                        addDebugLog('Status classification - Transaction: ' + t.Descricao + ' - Status: "' + t.Status + '" - isEntrada: ' + isEntrada + ' - isSaida: ' + isSaida);
+                    }
+                    
+                    // Use absolute value for calculations
+                    const valorAbsoluto = Math.abs(t.Valor);
+                    
+                    if (isEntrada) {
+                        // Receita - Status = "entrada"
+                        addDebugLog('Adding to receitas: ' + valorAbsoluto + ' - ' + t.Descricao);
+                        countEntradas++;
+                        totalReceitas += valorAbsoluto;
+                        const categoria = t.Categoria || 'Outras';
+                        if (!receitasPorCategoria[categoria]) {
+                            receitasPorCategoria[categoria] = 0;
+                        }
+                        receitasPorCategoria[categoria] += valorAbsoluto;
+                    } else if (isSaida) {
+                        // Despesa - Status = "saída"
+                        addDebugLog('Adding to despesas: ' + valorAbsoluto + ' - ' + t.Descricao);
+                        countSaidas++;
+                        totalDespesas += valorAbsoluto;
+                        const categoria = t.Categoria || 'Outros';
+                        if (!despesasPorCategoria[categoria]) {
+                            despesasPorCategoria[categoria] = 0;
+                        }
+                        despesasPorCategoria[categoria] += valorAbsoluto;
+                    } else {
+                        countUnclear++;
+                        // Fallback to value sign if status is unclear
+                        if (t.Valor > 0) {
+                            totalReceitas += t.Valor;
+                            const categoria = t.Categoria || 'Outras';
+                            if (!receitasPorCategoria[categoria]) {
+                                receitasPorCategoria[categoria] = 0;
+                            }
+                            receitasPorCategoria[categoria] += t.Valor;
+                        } else if (t.Valor < 0) {
+                            totalDespesas += Math.abs(t.Valor);
+                            const categoria = t.Categoria || 'Outros';
+                            if (!despesasPorCategoria[categoria]) {
+                                despesasPorCategoria[categoria] = 0;
+                            }
+                            despesasPorCategoria[categoria] += Math.abs(t.Valor);
+                        } else {
+                            console.log('Transaction skipped - unclear status and zero value:', t);
+                        }
+                    }
+                    
+                    // Skip monthly processing if no date
+                    if (!t.Data) {
+                        addDebugLog('Transaction without date skipped for monthly processing: ' + t.Descricao);
+                        return; // Skip monthly processing but totals are already added above
+                    }
+                
+                                // Parse date more robustly for monthly processing
+                let monthIndex = -1;
+                let dateParts;
+                
+                addDebugLog('Processing date for transaction: ' + t.Descricao + ' - Date: ' + t.Data + ' - Type: ' + typeof t.Data);
+                
+                if (typeof t.Data === 'string') {
+                    // Try different date formats
+                    if (t.Data.includes('/')) {
+                        dateParts = t.Data.split('/');
+                        addDebugLog('Date format detected: DD/MM/YYYY or MM/DD/YYYY - Parts: ' + dateParts.join(', '));
+                    } else if (t.Data.includes('-')) {
+                        dateParts = t.Data.split('-');
+                        addDebugLog('Date format detected: YYYY-MM-DD - Parts: ' + dateParts.join(', '));
+                    } else if (t.Data.includes('.')) {
+                        dateParts = t.Data.split('.');
+                        addDebugLog('Date format detected: DD.MM.YYYY - Parts: ' + dateParts.join(', '));
+                    } else {
+                        // Try to parse as Date object
+                        try {
+                            const date = new Date(t.Data);
+                            if (!isNaN(date.getTime())) {
+                                monthIndex = date.getMonth();
+                                addDebugLog('Date parsed successfully via Date constructor - Month index: ' + monthIndex);
+                            } else {
+                                addDebugLog('Date constructor failed - Invalid date: ' + t.Data);
+                            }
+                        } catch (e) {
+                            addDebugLog('Date constructor error: ' + e.message + ' for date: ' + t.Data);
+                            return; // Skip monthly processing for this transaction
+                        }
+                    }
+                    
+                    if (dateParts && dateParts.length >= 2) {
+                        // Handle different date formats (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD)
+                        if (dateParts[0].length === 4) {
+                            // YYYY-MM-DD format
+                            monthIndex = parseInt(dateParts[1], 10) - 1;
+                            addDebugLog('YYYY-MM-DD format detected - Month index: ' + monthIndex);
+                        } else if (dateParts[1].length === 4) {
+                            // DD/MM/YYYY format
+                            monthIndex = parseInt(dateParts[1], 10) - 1;
+                            addDebugLog('DD/MM/YYYY format detected - Month index: ' + monthIndex);
+                        } else {
+                            // Check if it's likely DD/MM/YYYY or MM/DD/YYYY
+                            const firstPart = parseInt(dateParts[0], 10);
+                            const secondPart = parseInt(dateParts[1], 10);
+                            
+                            // If first part is > 12, it's likely DD/MM/YYYY
+                            if (firstPart > 12) {
+                                monthIndex = secondPart - 1;
+                                addDebugLog('DD/MM/YYYY format detected (first part > 12) - Month index: ' + monthIndex);
+                            } else if (secondPart > 12) {
+                                // If second part is > 12, it's likely MM/DD/YYYY
+                                monthIndex = firstPart - 1;
+                                addDebugLog('MM/DD/YYYY format detected (second part > 12) - Month index: ' + monthIndex);
+                            } else {
+                                // Default to DD/MM/YYYY for Brazilian format
+                                monthIndex = secondPart - 1;
+                                addDebugLog('DD/MM/YYYY format assumed (default) - Month index: ' + monthIndex);
+                            }
+                        }
+                    }
+                } else if (typeof t.Data === 'object' && t.Data instanceof Date) {
+                    monthIndex = t.Data.getMonth();
+                    addDebugLog('Date object detected - Month index: ' + monthIndex);
+                }
+                
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    const mes = meses[monthIndex];
+                    if (!fluxoMensalTemp[mes]) {
+                        fluxoMensalTemp[mes] = { receitas: 0, despesas: 0, index: monthIndex };
+                        addDebugLog('Created new month entry for: ' + mes);
+                    }
+                    
+                    // Add to monthly totals (totals are already calculated above)
+                    if (isEntrada) {
+                        fluxoMensalTemp[mes].receitas += valorAbsoluto;
+                        addDebugLog('Added to monthly receitas: ' + valorAbsoluto + ' for month ' + mes + ' - Transaction: ' + t.Descricao);
+                    } else if (isSaida) {
+                        fluxoMensalTemp[mes].despesas += valorAbsoluto;
+                        addDebugLog('Added to monthly despesas: ' + valorAbsoluto + ' for month ' + mes + ' - Transaction: ' + t.Descricao);
+                    } else if (t.Valor > 0) {
+                        fluxoMensalTemp[mes].receitas += t.Valor;
+                        addDebugLog('Added to monthly receitas (fallback): ' + t.Valor + ' for month ' + mes);
+                    } else if (t.Valor < 0) {
+                        fluxoMensalTemp[mes].despesas += Math.abs(t.Valor);
+                        addDebugLog('Added to monthly despesas (fallback): ' + Math.abs(t.Valor) + ' for month ' + mes);
+                    }
+                } else {
+                    addDebugLog('Invalid month index: ' + monthIndex + ' for transaction: ' + t.Descricao + ' - Date: ' + t.Data);
+                }
+            });
+
+            const sortedMonths = Object.keys(fluxoMensalTemp).sort((a, b) => fluxoMensalTemp[a].index - fluxoMensalTemp[b].index);
+            const fluxoMensalFinal = {};
+            sortedMonths.forEach(mes => {
+                fluxoMensalFinal[mes] = fluxoMensalTemp[mes];
+            });
+
+            addDebugLog('=== RESUMO FINAL ===');
+            addDebugLog('Total Receitas calculado: ' + totalReceitas);
+            addDebugLog('Total Receitas esperado: 224072.59');
+            addDebugLog('Diferença: ' + (224072.59 - totalReceitas));
+            addDebugLog('Count Entradas: ' + countEntradas);
+            addDebugLog('Count Saídas: ' + countSaidas);
+            addDebugLog('Count Unclear: ' + countUnclear);
+            addDebugLog('Total Despesas: ' + totalDespesas);
+            addDebugLog('Saldo Final: ' + (totalReceitas - totalDespesas));
+            
+            // Adicionar análise detalhada de todas as transações
+            addDebugLog('=== ANÁLISE DETALHADA ===');
+            const todasEntradas = transactions.filter(t => (t.Status || '').toLowerCase().trim() === 'entrada');
+            addDebugLog('Total de transações com status "entrada": ' + todasEntradas.length);
+            
+            // Verificar se há transações com valores negativos
+            const entradasNegativas = todasEntradas.filter(t => t.Valor < 0);
+            addDebugLog('Transações "entrada" com valores negativos: ' + entradasNegativas.length);
+            if (entradasNegativas.length > 0) {
+                addDebugLog('Exemplos de entradas negativas:');
+                entradasNegativas.slice(0, 5).forEach(t => {
+                    addDebugLog('- ' + t.Valor + ' - ' + t.Descricao);
+                });
+            }
+            
+            // Verificar se há transações com valores zero
+            const entradasZero = todasEntradas.filter(t => t.Valor === 0);
+            addDebugLog('Transações "entrada" com valores zero: ' + entradasZero.length);
+            
+            // Verificar se há transações com valores muito altos (possíveis erros)
+            const entradasAltas = todasEntradas.filter(t => t.Valor > 10000);
+            addDebugLog('Transações "entrada" com valores > 10.000: ' + entradasAltas.length);
+            if (entradasAltas.length > 0) {
+                addDebugLog('Transações com valores altos:');
+                entradasAltas.forEach(t => {
+                    addDebugLog('- ' + t.Valor + ' - ' + t.Descricao);
+                });
+            }
+            
+            // Somar todos os valores de entrada manualmente para verificar
+            const somaManual = todasEntradas.reduce((sum, t) => sum + Math.abs(t.Valor), 0);
+            addDebugLog('Soma manual de todas as entradas: ' + somaManual);
+            addDebugLog('Diferença entre soma manual e calculada: ' + (somaManual - totalReceitas));
+            
+            // Mostrar resumo do fluxo mensal
+            addDebugLog('=== RESUMO FLUXO MENSAL ===');
+            Object.keys(fluxoMensalFinal).forEach(mes => {
+                const dados = fluxoMensalFinal[mes];
+                addDebugLog(`${mes}: Receitas R$ ${dados.receitas.toFixed(2)} | Despesas R$ ${dados.despesas.toFixed(2)} | Saldo R$ ${(dados.receitas - dados.despesas).toFixed(2)}`);
+            });
+            
+            // Verificar se há transações que não estão sendo processadas
+            const transacoesNaoProcessadas = transactions.filter(t => {
+                const status = (t.Status || '').toLowerCase().trim();
+                return status === 'entrada' && (t.Valor === undefined || t.Valor === null || isNaN(t.Valor));
+            });
+            addDebugLog('Transações "entrada" não processadas (valor inválido): ' + transacoesNaoProcessadas.length);
+            if (transacoesNaoProcessadas.length > 0) {
+                addDebugLog('Exemplos de transações não processadas:');
+                transacoesNaoProcessadas.slice(0, 5).forEach(t => {
+                    addDebugLog('- Status: ' + t.Status + ', Valor: ' + t.Valor + ', Descrição: ' + t.Descricao);
+                });
+            }
+            
+            // Verificar se há transações com status vazio ou nulo
+            const transacoesStatusVazio = transactions.filter(t => !t.Status || t.Status.trim() === '');
+            addDebugLog('Transações com status vazio: ' + transacoesStatusVazio.length);
+            if (transacoesStatusVazio.length > 0) {
+                addDebugLog('Exemplos de transações com status vazio:');
+                transacoesStatusVazio.slice(0, 5).forEach(t => {
+                    addDebugLog('- Valor: ' + t.Valor + ', Descrição: ' + t.Descricao);
+                });
+            }
+            
+            console.log('Final totals:', {
+                totalReceitas,
+                totalDespesas,
+                saldoFinal: totalReceitas - totalDespesas,
+                countEntradas,
+                countSaidas,
+                countUnclear,
+                despesasPorCategoria,
+                receitasPorCategoria
+            });
+            
+            return {
+                totalReceitas,
+                totalDespesas,
+                saldoFinal: totalReceitas - totalDespesas,
+                despesasPorCategoria,
+                receitasPorCategoria,
+                fluxoMensal: fluxoMensalFinal
+            };
+        }
+
+        function updateUI(processedData, transactions) {
+            // Store transactions globally (only if not in view mode)
+            const viewMode = document.getElementById('view-mode').value;
+            if (viewMode === 'all' || viewMode === '') {
+                allTransactions = transactions;
+            }
+            filteredTransactions = [...transactions];
+
+            // Get view mode info for display
+            const viewModeText = getViewModeText();
+            
+            // Animate KPI numbers
+            animateNumber('total-entradas', processedData.totalReceitas);
+            animateNumber('total-saidas', processedData.totalDespesas);
+            animateNumber('saldo-final', processedData.saldoFinal);
+
+            // Update header with view mode info
+            const header = document.querySelector('header h1');
+            if (header && viewModeText) {
+                header.innerHTML = `<i class="fas fa-chart-line text-blue-600 mr-3"></i>Kadoshboard TCM <span class="text-sm text-gray-500 ml-2">(${viewModeText})</span>`;
+            }
+
+            const moodIcon = document.getElementById('mood-icon');
+            const moodText = document.getElementById('mood-text');
+            const moodCard = document.getElementById('mood-card');
+            
+            // Reset mood card classes
+            moodCard.className = 'kpi-card flex flex-col items-center justify-center';
+            
+            if (processedData.saldoFinal > 20000) {
+                moodIcon.textContent = '😄';
+                moodText.textContent = 'Excelente!';
+                moodCard.classList.add('bg-green-50');
+            } else if (processedData.saldoFinal > 0) {
+                moodIcon.textContent = '🙂';
+                moodText.textContent = 'Positivo';
+                moodCard.classList.add('bg-blue-50');
+            } else if (processedData.saldoFinal < 0) {
+                moodIcon.textContent = '🙁';
+                moodText.textContent = 'Atenção';
+                moodCard.classList.add('bg-red-50');
+            } else {
+                moodIcon.textContent = '😐';
+                moodText.textContent = 'Estável';
+                moodCard.classList.add('bg-gray-50');
+            }
+
+            renderFluxoMensalChart(processedData.fluxoMensal);
+            renderDespesasCategoriaChart(processedData.despesasPorCategoria);
+            renderEntradasCategoriaChart(processedData.receitasPorCategoria);
+
+            // Update additional analytics
+            updateTopCategories(processedData);
+            updateMonthlyTrends(processedData.fluxoMensal);
+            updateQuickStats(processedData, transactions);
+            updateCategoryFilter(transactions);
+            renderTransactionsTable();
+        }
+
+        function updateTopCategories(processedData) {
+            const topCategoriesDiv = document.getElementById('top-categories');
+            const allCategories = { ...processedData.receitasPorCategoria, ...processedData.despesasPorCategoria };
+            
+            const sortedCategories = Object.entries(allCategories)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 5);
+
+            topCategoriesDiv.innerHTML = sortedCategories.map(([category, amount], index) => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center">
+                        <span class="text-lg font-bold text-gray-400 mr-3">${index + 1}</span>
+                        <div>
+                            <p class="font-medium text-gray-800">${category}</p>
+                            <p class="text-sm text-gray-500">${formatCurrency(amount)}</p>
+                        </div>
+                    </div>
+                    <div class="text-2xl">
+                        ${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateMonthlyTrends(fluxoMensal) {
+            const trendsDiv = document.getElementById('monthly-trends');
+            const months = Object.keys(fluxoMensal);
+            
+            trendsDiv.innerHTML = months.map(month => {
+                const data = fluxoMensal[month];
+                const netFlow = data.receitas - data.despesas;
+                const trend = netFlow > 0 ? 'up' : 'down';
+                const color = netFlow > 0 ? 'text-green-600' : 'text-red-600';
+                const icon = netFlow > 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                
+                return `
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                            <p class="font-medium text-gray-800">${month}</p>
+                            <p class="text-sm text-gray-500">${formatCurrency(Math.abs(netFlow))}</p>
+                        </div>
+                        <div class="text-xl ${color}">
+                            <i class="fas ${icon}"></i>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateQuickStats(processedData, transactions) {
+            const statsDiv = document.getElementById('quick-stats');
+            
+            const avgTransaction = transactions.length > 0 ? 
+                (processedData.totalReceitas + processedData.totalDespesas) / transactions.length : 0;
+            
+            const profitableMonths = Object.values(processedData.fluxoMensal)
+                .filter(month => month.receitas > month.despesas).length;
+            
+            const totalMonths = Object.keys(processedData.fluxoMensal).length;
+            const successRate = totalMonths > 0 ? (profitableMonths / totalMonths * 100).toFixed(1) : 0;
+
+            statsDiv.innerHTML = `
+                <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div>
+                        <p class="font-medium text-gray-800">Média por Transação</p>
+                        <p class="text-sm text-gray-500">${formatCurrency(avgTransaction)}</p>
+                    </div>
+                    <div class="text-2xl text-blue-600">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <div>
+                        <p class="font-medium text-gray-800">Taxa de Sucesso</p>
+                        <p class="text-sm text-gray-500">${successRate}% dos meses</p>
+                    </div>
+                    <div class="text-2xl text-green-600">
+                        <i class="fas fa-percentage"></i>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                    <div>
+                        <p class="font-medium text-gray-800">Total de Transações</p>
+                        <p class="text-sm text-gray-500">${transactions.length} registros</p>
+                    </div>
+                    <div class="text-2xl text-purple-600">
+                        <i class="fas fa-database"></i>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateCategoryFilter(transactions) {
+            const categoryFilter = document.getElementById('category-filter');
+            const yearFilter = document.getElementById('year-filter');
+            const categories = [...new Set(transactions.map(t => t.Categoria))].sort();
+            const years = [...new Set(transactions.map(t => t.Year))].sort();
+            
+            categoryFilter.innerHTML = '<option value="">Todas as categorias</option>' +
+                categories.map(category => `<option value="${category}">${category}</option>`).join('');
+            
+            yearFilter.innerHTML = '<option value="">Todos os anos</option>' +
+                years.map(year => `<option value="${year}">${year}</option>`).join('');
+        }
+
+        function renderTransactionsTable() {
+            const tableBody = document.getElementById('transactions-table');
+            tableBody.innerHTML = '';
+            
+            // Calculate pagination
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = startIndex + pageSize;
+            const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex);
+            
+            if (paginatedTransactions.length === 0) {
+                // Show empty state
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `
+                    <td colspan="6" class="px-6 py-12 text-center">
+                        <div class="flex flex-col items-center">
+                            <i class="fas fa-search text-4xl text-gray-300 mb-4"></i>
+                            <p class="text-gray-500 text-lg">Nenhuma transação encontrada</p>
+                            <p class="text-gray-400 text-sm">Tente ajustar os filtros de busca</p>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(emptyRow);
+            } else {
+                paginatedTransactions.forEach((t, index) => {
+                    const row = document.createElement('tr');
+                    row.className = 'table-row';
+                    
+                    // Determine if it's entrada or saída based on Status column
+                    const status = (t.Status || '').toLowerCase().trim();
+                    const isEntrada = status === 'entrada';
+                    const isSaida = status === 'saída' || status === 'saida';
+                    
+                    // Determine if it's receita based on status
+                    const isReceita = isEntrada;
+                    
+                    // Determine status badge color
+                    let statusBadgeClass = 'bg-gray-100 text-gray-800';
+                    if (isEntrada) {
+                        statusBadgeClass = 'bg-green-100 text-green-800';
+                    } else if (isSaida) {
+                        statusBadgeClass = 'bg-red-100 text-red-800';
+                    }
+                    
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${t.Data}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${t.OS || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium">${t.Descricao || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                ${t.Categoria}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass}">
+                                ${t.Status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${isReceita ? 'text-green-600' : 'text-red-600'}">
+                            ${formatCurrency(Math.abs(t.Valor))}
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                    
+                    setTimeout(() => {
+                        row.classList.add('fade-in');
+                    }, index * 30);
+                });
+            }
+
+            // Update pagination info
+            updatePaginationInfo();
+        }
+
+        function updatePaginationInfo() {
+            totalPages = Math.ceil(filteredTransactions.length / pageSize);
+            
+            // Ensure current page is within bounds
+            if (currentPage > totalPages) {
+                currentPage = totalPages || 1;
+            }
+            
+            // Update display info
+            const startIndex = (currentPage - 1) * pageSize + 1;
+            const endIndex = Math.min(currentPage * pageSize, filteredTransactions.length);
+            
+            document.getElementById('showing-count').textContent = `${startIndex}-${endIndex}`;
+            document.getElementById('total-count').textContent = filteredTransactions.length;
+            document.getElementById('current-page').textContent = currentPage;
+            document.getElementById('total-pages').textContent = totalPages;
+            
+            // Update pagination buttons
+            const prevButton = document.getElementById('prev-page');
+            const nextButton = document.getElementById('next-page');
+            
+            prevButton.disabled = currentPage <= 1;
+            nextButton.disabled = currentPage >= totalPages;
+            
+            // Update button styles
+            prevButton.className = currentPage <= 1 
+                ? 'px-3 py-1 text-sm bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed transition-colors'
+                : 'px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors';
+                
+            nextButton.className = currentPage >= totalPages
+                ? 'px-3 py-1 text-sm bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed transition-colors'
+                : 'px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors';
+        }
+
+        function animateNumber(elementId, targetValue) {
+            const element = document.getElementById(elementId);
+            const startValue = 0;
+            const duration = 1000;
+            const startTime = performance.now();
+            
+            function updateNumber(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const currentValue = startValue + (targetValue - startValue) * progress;
+                
+                element.textContent = formatCurrency(currentValue);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(updateNumber);
+                }
+            }
+            
+            requestAnimationFrame(updateNumber);
+        }
+
+        function renderChart(canvasId, chartInstance, chartType, chartData, chartLabel, colors) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+            const labels = Object.keys(chartData);
+            const data = Object.values(chartData);
+            return new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: chartLabel,
+                        data: data,
+                        backgroundColor: colors.slice(0, labels.length),
+                        hoverOffset: 4,
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { 
+                                boxWidth: 12, 
+                                padding: 15,
+                                font: {
+                                    family: 'Inter',
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#667eea',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.chart.getDatasetMeta(0).total;
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(2) + '%' : '0.00%';
+                                    return `${label}: ${formatCurrency(value)} (${percentage})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderFluxoMensalChart(fluxoMensal) {
+            const ctx = document.getElementById('fluxo-mensal-chart').getContext('2d');
+            if(fluxoMensalChart) fluxoMensalChart.destroy();
+            fluxoMensalChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(fluxoMensal),
+                    datasets: [
+                        {
+                            label: 'Receitas',
+                            data: Object.values(fluxoMensal).map(v => v.receitas),
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        },
+                        {
+                            label: 'Despesas',
+                            data: Object.values(fluxoMensal).map(v => v.despesas),
+                            backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { 
+                                callback: value => 'R$ ' + (value/1000) + 'k',
+                                font: {
+                                    family: 'Inter'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                font: {
+                                    family: 'Inter'
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                font: {
+                                    family: 'Inter'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#667eea',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: context => `${context.dataset.label}: ${formatCurrency(context.raw)}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDespesasCategoriaChart(data) {
+            const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2', '#F9E79F'];
+            despesasCategoriaChart = renderChart('despesas-categoria-chart', despesasCategoriaChart, 'doughnut', data, 'Despesas por Categoria', colors);
+        }
+
+        function renderEntradasCategoriaChart(data) {
+            const colors = ['#2ECC71', '#3498DB', '#9B59B6', '#E67E22', '#1ABC9C', '#34495E', '#F39C12', '#E74C3C', '#16A085', '#8E44AD', '#F1C40F', '#E67E22', '#27AE60', '#2980B9', '#8E44AD', '#D35400'];
+            entradasCategoriaChart = renderChart('entradas-categoria-chart', entradasCategoriaChart, 'doughnut', data, 'Entradas por Categoria', colors);
+        }
+
+        function handleMultipleFiles(files) {
+            if (!files || files.length === 0) return;
+
+            // Add files to pending list
+            Array.from(files).forEach(file => {
+                const yearMatch = file.name.match(/(\d{4})/);
+                const year = yearMatch ? yearMatch[1] : new Date().getFullYear();
+                
+                // Check if year already exists
+                const existingFile = pendingFiles.find(f => {
+                    const fYearMatch = f.name.match(/(\d{4})/);
+                    const fYear = fYearMatch ? fYearMatch[1] : new Date().getFullYear();
+                    return fYear === year;
+                });
+                
+                if (existingFile) {
+                    // Replace existing file for this year
+                    const index = pendingFiles.indexOf(existingFile);
+                    pendingFiles[index] = file;
+                } else {
+                    pendingFiles.push(file);
+                }
+                
+                // If this is Caixa_2024.xlsx, automatically analyze its structure
+                if (file.name.includes('Caixa_2024') && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const workbook = XLSX.read(e.target.result, { type: 'binary' });
+                            const sheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[sheetName];
+                            
+                            const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                            const headers = rawData[0] || [];
+                            
+                            console.log('Auto-detected Caixa_2024.xlsx headers:', headers);
+                            setStandardStructure(headers);
+                        } catch (error) {
+                            console.error('Error auto-analyzing Caixa_2024.xlsx:', error);
+                        }
+                    };
+                    reader.readAsBinaryString(file);
+                }
+            });
+            
+            // Force update the display
+            setTimeout(() => {
+                updateSelectedFilesDisplay();
+                const processBtn = document.getElementById('process-files-btn');
+                if (processBtn) {
+                    processBtn.classList.remove('hidden');
+                }
+            }, 100);
+        }
+
+        function updateSelectedFilesDisplay() {
+            const selectedFilesDiv = document.getElementById('selected-files');
+            
+            if (!selectedFilesDiv) return;
+
+            // Clear the display
+            selectedFilesDiv.innerHTML = '';
+
+            if (pendingFiles.length === 0) {
+                selectedFilesDiv.innerHTML = '<p class="text-gray-500 text-sm">Nenhum arquivo selecionado</p>';
+                return;
+            }
+
+            try {
+                // Add summary
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'mb-4 p-3 bg-green-50 rounded-lg border border-green-200';
+                summaryDiv.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle text-green-600 mr-2"></i>
+                        <span class="text-sm font-medium text-green-800">
+                            ${pendingFiles.length} arquivo(s) selecionado(s) - Clique em "Processar Arquivos" para continuar
+                        </span>
+                    </div>
+                `;
+                selectedFilesDiv.appendChild(summaryDiv);
+
+                // Add each file
+                pendingFiles.forEach((file, index) => {
+                    const yearMatch = file.name.match(/(\d{4})/);
+                    const year = yearMatch ? yearMatch[1] : new Date().getFullYear();
+                    
+                    // Determine file type icon
+                    const fileExtension = file.name.split('.').pop().toLowerCase();
+                    let fileIcon, iconColor;
+                    
+                    if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                        fileIcon = 'fas fa-file-excel';
+                        iconColor = 'text-green-500';
+                    } else if (fileExtension === 'csv') {
+                        fileIcon = 'fas fa-file-csv';
+                        iconColor = 'text-blue-500';
+                    } else {
+                        fileIcon = 'fas fa-file';
+                        iconColor = 'text-gray-500';
+                    }
+                    
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'flex items-center justify-between p-3 bg-blue-50 rounded-lg mb-2';
+                    fileItem.innerHTML = `
+                        <div class="flex items-center">
+                            <i class="${fileIcon} ${iconColor} mr-3"></i>
+                            <div>
+                                <p class="font-medium text-gray-800">${file.name}</p>
+                                <p class="text-sm text-gray-500">Ano: ${year} • Tipo: ${fileExtension.toUpperCase()}</p>
+                            </div>
+                        </div>
+                        <button onclick="removePendingFile('${year}')" class="text-red-500 hover:text-red-700">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    `;
+                    selectedFilesDiv.appendChild(fileItem);
+                });
+            } catch (error) {
+                console.error('Error updating display:', error);
+                selectedFilesDiv.innerHTML = '<p class="text-red-500 text-sm">Erro ao exibir arquivos</p>';
+            }
+        }
+
+        function removePendingFile(year) {
+            pendingFiles = pendingFiles.filter(file => {
+                const yearMatch = file.name.match(/(\d{4})/);
+                const fileYear = yearMatch ? yearMatch[1] : new Date().getFullYear();
+                return fileYear !== year;
+            });
+            
+            updateSelectedFilesDisplay();
+            
+            if (pendingFiles.length === 0) {
+                document.getElementById('process-files-btn').classList.add('hidden');
+            }
+        }
+
+        function clearAllFiles() {
+            pendingFiles = [];
+            allTransactions = [];
+            filteredTransactions = [];
+            processedData = null;
+            updateSelectedFilesDisplay();
+            document.getElementById('process-files-btn').classList.add('hidden');
+            document.getElementById('dashboard-content').style.display = 'none';
+            document.getElementById('selected-files').innerHTML = '';
+        }
+
+        function processSelectedFiles() {
+            if (pendingFiles.length === 0) return;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('dashboard-content').style.display = 'none';
+            document.getElementById('loading').innerText = 'Processando arquivos...';
+
+            let processedFiles = 0;
+            let allTransactions = [];
+
+            pendingFiles.forEach((file, index) => {
+                const yearMatch = file.name.match(/(\d{4})/);
+                const year = yearMatch ? yearMatch[1] : new Date().getFullYear();
+                
+                // Determine file type
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+                const isExcel = fileExtension === 'xlsx' || fileExtension === 'xls';
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    let fileContent, fileType;
+                    
+                    if (isExcel) {
+                        fileContent = e.target.result;
+                        fileType = fileExtension;
+                    } else {
+                        fileContent = e.target.result;
+                        fileType = 'csv';
+                    }
+                    
+                    const transactions = parseData(fileContent, fileType);
+                    
+                    if (transactions.length > 0) {
+                        // Add year information to transactions
+                        transactions.forEach(t => {
+                            t.Year = year;
+                            t.FileName = file.name;
+                        });
+                        allTransactions = allTransactions.concat(transactions);
+                    }
+                    
+                    processedFiles++;
+                    
+                    if (processedFiles === pendingFiles.length) {
+                        if (allTransactions.length === 0) {
+                            document.getElementById('loading').innerText = 'Não foi possível carregar os dados ou os arquivos estão vazios.';
+                            return;
+                        }
+                        
+                        processedData = processTransactions(allTransactions);
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('dashboard-content').style.display = 'block';
+                        
+                        updateUI(processedData, allTransactions);
+                        updateViewControls(allTransactions);
+                    }
+                };
+                
+                reader.onerror = function(error) {
+                    console.error('Error reading file:', error);
+                    processedFiles++;
+                    if (processedFiles === pendingFiles.length) {
+                        document.getElementById('loading').innerText = 'Erro ao ler arquivo: ' + file.name;
+                    }
+                };
+                
+                // Read file as appropriate type
+                if (isExcel) {
+                    reader.readAsBinaryString(file);
+                } else {
+                    reader.readAsText(file);
+                }
+            });
+        }
+
+        // Make processSelectedFiles globally accessible
+        window.processSelectedFiles = processSelectedFiles;
+
+        // Function to remove a specific file
+        window.removeFile = function(year) {
+            // Remove from selected files display
+            const selectedFilesDiv = document.getElementById('selected-files');
+            const fileItems = selectedFilesDiv.querySelectorAll('div');
+            fileItems.forEach(item => {
+                if (item.textContent.includes(`Ano: ${year}`)) {
+                    item.remove();
+                }
+            });
+            
+            // Remove transactions from that year
+            allTransactions = allTransactions.filter(t => t.Year !== year);
+            filteredTransactions = [...allTransactions];
+            
+            if (allTransactions.length === 0) {
+                document.getElementById('dashboard-content').style.display = 'none';
+                return;
+            }
+            
+            const processedData = processTransactions(allTransactions);
+            updateUI(processedData, allTransactions);
+        };
+
+        function updateViewControls(transactions) {
+            const yearSelector = document.getElementById('year-selector');
+            const viewMode = document.getElementById('view-mode');
+            
+            // Get unique years
+            const years = [...new Set(transactions.map(t => t.Year))].sort();
+            
+            // Update year selector
+            yearSelector.innerHTML = '<option value="">Selecione o ano</option>' +
+                years.map(year => `<option value="${year}">${year}</option>`).join('');
+            
+            // Add event listeners
+            viewMode.addEventListener('change', handleViewModeChange);
+            yearSelector.addEventListener('change', handleViewModeChange);
+        }
+
+        function handleViewModeChange() {
+            const viewMode = document.getElementById('view-mode').value;
+            const selectedYear = document.getElementById('year-selector').value;
+            const yearSelector = document.getElementById('year-selector');
+            
+            // Show/hide year selector
+            if (viewMode === 'year') {
+                yearSelector.classList.remove('hidden');
+            } else {
+                yearSelector.classList.add('hidden');
+            }
+            
+            // Filter transactions based on view mode
+            let filteredData;
+            let displayTransactions;
+            
+            switch(viewMode) {
+                case 'all':
+                    filteredData = processedData;
+                    displayTransactions = allTransactions;
+                    break;
+                case 'year':
+                    if (selectedYear) {
+                        const yearTransactions = allTransactions.filter(t => t.Year === selectedYear);
+                        filteredData = processTransactions(yearTransactions);
+                        displayTransactions = yearTransactions;
+                    } else {
+                        filteredData = processedData;
+                        displayTransactions = allTransactions;
+                    }
+                    break;
+                case 'average':
+                    filteredData = calculateAverageData();
+                    displayTransactions = allTransactions; // Keep all for table display
+                    break;
+                default:
+                    filteredData = processedData;
+                    displayTransactions = allTransactions;
+            }
+            
+            if (filteredData) {
+                updateUI(filteredData, displayTransactions);
+            }
+        }
+
+        function calculateAverageData() {
+            if (!processedData || !allTransactions.length) return null;
+            
+            const years = [...new Set(allTransactions.map(t => t.Year))];
+            const numYears = years.length;
+            
+            if (numYears === 0) return processedData;
+            
+            // Calculate averages
+            const avgData = {
+                totalReceitas: processedData.totalReceitas / numYears,
+                totalDespesas: processedData.totalDespesas / numYears,
+                saldoFinal: processedData.saldoFinal / numYears,
+                despesasPorCategoria: {},
+                receitasPorCategoria: {},
+                fluxoMensal: {}
+            };
+            
+            // Average by category
+            Object.keys(processedData.despesasPorCategoria).forEach(category => {
+                avgData.despesasPorCategoria[category] = processedData.despesasPorCategoria[category] / numYears;
+            });
+            
+            Object.keys(processedData.receitasPorCategoria).forEach(category => {
+                avgData.receitasPorCategoria[category] = processedData.receitasPorCategoria[category] / numYears;
+            });
+            
+            // Average by month
+            Object.keys(processedData.fluxoMensal).forEach(month => {
+                avgData.fluxoMensal[month] = {
+                    receitas: processedData.fluxoMensal[month].receitas / numYears,
+                    despesas: processedData.fluxoMensal[month].despesas / numYears,
+                    index: processedData.fluxoMensal[month].index
+                };
+            });
+            
+            return avgData;
+        }
+
+        function getViewModeText() {
+            const viewMode = document.getElementById('view-mode').value;
+            const selectedYear = document.getElementById('year-selector').value;
+            
+            switch(viewMode) {
+                case 'all':
+                    return 'Todos os anos';
+                case 'year':
+                    return selectedYear ? `Ano ${selectedYear}` : 'Ano específico';
+                case 'average':
+                    return 'Média dos anos';
+                default:
+                    return '';
+            }
+        }
+
+        // File input change event
+        fileInput.addEventListener('change', function(event) {
+            const files = Array.from(event.target.files);
+            
+            if (files.length > 0) {
+                handleMultipleFiles(files);
+            }
+            
+            // Clear the input to allow selecting the same file again
+            event.target.value = '';
+        });
+
+        // Search and filter functionality
+        document.getElementById('search-input').addEventListener('input', filterTransactions);
+        document.getElementById('year-filter').addEventListener('change', filterTransactions);
+        document.getElementById('category-filter').addEventListener('change', filterTransactions);
+        document.getElementById('page-size').addEventListener('change', changePageSize);
+        
+        // Pagination controls
+        document.getElementById('prev-page').addEventListener('click', goToPreviousPage);
+        document.getElementById('next-page').addEventListener('click', goToNextPage);
+
+        function filterTransactions() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+            const selectedYear = document.getElementById('year-filter').value;
+            const selectedCategory = document.getElementById('category-filter').value;
+
+            filteredTransactions = allTransactions.filter(transaction => {
+                // Improved search functionality
+                const matchesSearch = !searchTerm || 
+                    (transaction.Descricao && transaction.Descricao.toLowerCase().includes(searchTerm)) ||
+                    (transaction.Categoria && transaction.Categoria.toLowerCase().includes(searchTerm)) ||
+                    (transaction.Year && transaction.Year.toString().includes(searchTerm)) ||
+                    (transaction.Valor && transaction.Valor.toString().includes(searchTerm));
+                
+                const matchesYear = !selectedYear || transaction.Year === selectedYear;
+                const matchesCategory = !selectedCategory || transaction.Categoria === selectedCategory;
+                
+                return matchesSearch && matchesYear && matchesCategory;
+            });
+
+            // Reset to first page when filtering
+            currentPage = 1;
+            renderTransactionsTable();
+        }
+
+        function changePageSize() {
+            pageSize = parseInt(document.getElementById('page-size').value);
+            currentPage = 1; // Reset to first page
+            renderTransactionsTable();
+        }
+
+        function goToPreviousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTransactionsTable();
+            }
+        }
+
+        function goToNextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderTransactionsTable();
+            }
+        }
+
+        // Global sort function
+        window.sortTable = function(field) {
+            if (currentSort.field === field) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.field = field;
+                currentSort.direction = 'asc';
+            }
+
+            filteredTransactions.sort((a, b) => {
+                let aValue, bValue;
+                
+                switch(field) {
+                    case 'date':
+                        aValue = new Date(a.Data.split('/').reverse().join('-'));
+                        bValue = new Date(b.Data.split('/').reverse().join('-'));
+                        break;
+                    case 'os':
+                        aValue = a.OS || '';
+                        bValue = b.OS || '';
+                        break;
+                    case 'description':
+                        aValue = a.Descricao || '';
+                        bValue = b.Descricao || '';
+                        break;
+                    case 'category':
+                        aValue = a.Categoria || '';
+                        bValue = b.Categoria || '';
+                        break;
+                    case 'status':
+                        aValue = a.Status || '';
+                        bValue = b.Status || '';
+                        break;
+                    case 'value':
+                        aValue = a.Valor;
+                        bValue = b.Valor;
+                        break;
+                    default:
+                        return 0;
+                }
+
+                if (typeof aValue === 'string') {
+                    aValue = aValue.toLowerCase();
+                    bValue = bValue.toLowerCase();
+                }
+
+                if (aValue < bValue) return currentSort.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            renderTransactionsTable();
+        };
+    });
+    </script>
+</body>
+</html>
